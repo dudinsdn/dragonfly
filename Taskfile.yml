@@ -1,0 +1,67 @@
+# https://taskfile.dev
+
+version: "3"
+
+vars:
+
+dotenv:
+  - ".env"
+
+tasks:
+
+  dev:
+    desc: "Start development server"
+    cmd: air
+
+  doc:go:
+    desc: "Add package comment doc.go"
+    cmds:
+      - |
+        find . -type d ! -path './.git*' ! -path './cmd*' | while read dir; do
+          # Skip root folder if it's not a Go package
+          if [ "$dir" = "." ]; then continue; fi
+          # Find Go files excluding main.go and docs.go
+          go_files=$(find "$dir" -maxdepth 1 -type f -name '*.go' ! -name 'main.go' ! -name 'docs.go')
+          # Only proceed if there are other Go files (excluding main.go and docs.go)
+          if [ -n "$go_files" ]; then
+            # Do not overwrite if doc.go already exists
+            if [ ! -f "$dir/doc.go" ]; then
+              pkg=$(basename "$dir")
+              {
+                echo "// Package $pkg provides ..."
+                echo "//"
+                echo "// TODO: Add package description here"
+                echo "package $pkg"
+              } > "$dir/doc.go"
+              echo "Added doc.go to $dir"
+            fi
+          fi
+        done
+
+  doc:comment:
+    desc: "Formatting standard comment"
+    cmds:
+      - |
+        find . -type f -name '*.go' ! -name 'main.go' ! -name 'docs.go' ! -path './.git/*' ! -path './vendor/*' ! -path './internal/core/port/mock*' | while read file; do
+          awk '
+            BEGIN { block=0 }
+            # Start of block comment /** (multiline)
+            /^\s*\/\*\*/ { block=1; next }
+            # End of block comment */
+            block==1 && /\*\// { block=0; next }
+            # Inside block comment (lines with * at the start)
+            block==1 {
+              # Only lines that start with optional whitespace and a single *
+              if ($0 ~ /^\s*\*/) {
+                # Remove leading whitespace and single *
+                sub(/^\s*\*\s?/, "// ");
+                if ($0 ~ /^\/\/\s*$/) next      # skip empty comment lines
+                if ($0 ~ /^\/\/ \/$/) next      # skip single slash only
+                print;
+                next;
+              }
+            }
+            # Outside block comment, print as-is
+            { print }
+          ' "$file" > "$file.tmp" && mv "$file.tmp" "$file"
+        done
